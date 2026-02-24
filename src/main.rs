@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             verbose,
         } => {
             let expr = parse(&expression)?;
-            
+
             println!("入力式: {}", expr);
             println!("ノード数: {}", expr.node_count());
             println!();
@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut current = expr.clone();
                 println!("簡約過程:");
                 println!("  Step 0: {}", current);
-                
+
                 for step in 1..=max_steps {
                     if let Some(next) = current.beta_reduce_step() {
                         println!("  Step {}: {}", step, next);
@@ -85,7 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         break;
                     }
                 }
-                
+
                 if current.beta_reduce_step().is_some() {
                     println!("\n最大ステップ数 {} に到達しました。", max_steps);
                 }
@@ -131,7 +131,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 None => {
                     println!("\n========================================");
-                    println!("✗ 失敗: {} 個までの組み合わせでは見つかりませんでした", max_n);
+                    println!(
+                        "✗ 失敗: {} 個までの組み合わせでは見つかりませんでした",
+                        max_n
+                    );
                     println!("========================================");
                 }
             }
