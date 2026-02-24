@@ -1,0 +1,12 @@
+[package]
+name = "lambda"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nom = "7.1"
+indicatif = "0.17"
+clap = { version = "4.5", features = ["derive"] }
+
+[profile.release]
+debug = true

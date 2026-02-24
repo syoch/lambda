@@ -1,0 +1,10 @@
+{
+  "chat.tools.terminal.autoApprove": {
+    "take-perf": true,
+    "/^timeout 60 perf report --stdio -n --percent-limit 2\\.5 2>&1 \\| head -80$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "timeout": true
+  }
+}

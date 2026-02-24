@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+cd `dirname $0`
+
+clang take-perf.c -o take-perf
+sudo chown root:root take-perf
+sudo chmod 4755 take-perf
+ls -l take-perf
