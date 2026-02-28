@@ -1,0 +1,7 @@
+# Comprehensive test suite for all lambda libraries
+
+include "test_basics.lambda"
+include "test_boolean.lambda"
+include "test_pair.lambda"
+include "test_natural_number.lambda"
+include "test_list.lambda"

@@ -1,0 +1,3 @@
+Pair = \x.\y.\f.f x y
+PairFirst = \p.p (\x.\y.x)
+PairSeconds = \p.p (\x.\y.y)

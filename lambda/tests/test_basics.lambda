@@ -1,0 +1,18 @@
+# Test script for basics.lambda
+from "basics.lambda" import I, K, S
+
+# Test I (Identity)
+assert: I \x.x == \y.y
+assert: I \a.a == \b.b
+
+# Test K (Constant)
+assert(100): K (\x.x) (\y.y) == \x.x
+assert(100): K (\a.a) (\b.b) == \a.a
+
+# Test S (Substitution)
+assert: S K K == I
+assert: S K K \x.x == \y.y
+
+# Note: Z combinator (fixed-point combinator) causes infinite recursion
+# Z = \f. (\x. f (x x)) (\x. f (x x))
+# Cannot test: Z would diverge

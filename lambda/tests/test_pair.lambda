@@ -1,0 +1,15 @@
+# Test script for pair.lambda
+from "pair.lambda" import Pair, PairFirst, PairSeconds
+from "basics.lambda" import I, K
+
+# Test Pair construction and accessors
+assert: PairFirst (Pair I K) == I
+assert: PairSeconds (Pair I K) == K
+
+# Test with lambda expressions
+assert: PairFirst (Pair (\x.x) (\y.y)) == (\z.z)
+assert: PairSeconds (Pair (\x.x) (\y.y)) == (\z.z)
+
+# Test nested pairs
+assert: PairFirst (PairFirst (Pair (Pair I K) K)) == I
+assert: PairSeconds (PairFirst (Pair (Pair I K) K)) == K

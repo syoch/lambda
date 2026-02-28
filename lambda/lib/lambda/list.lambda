@@ -1,0 +1,4 @@
+ListNil = \x.x
+ListCons = \h.\t.\s.\n.s h t n
+ListHead = \l.l (\h.\t.\n.h) ListNil
+ListTail = \l.l (\h.\t.\n.t) ListNil

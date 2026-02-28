@@ -1,0 +1,10 @@
+# Test script for boolean.lambda
+from "boolean.lambda" import True, False
+
+# Test True (selects first argument)
+assert: True (\x.x) (\y.y) == \z.z
+assert: True (\a.a) (\b.b) == \c.c
+
+# Test False (selects second argument)
+assert: False (\x.x) (\y.y) == \z.z
+assert: False (\a.a) (\b.b) == \c.c

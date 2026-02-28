@@ -1,0 +1,12 @@
+# Test script for list.lambda
+from "list.lambda" import ListNil, ListCons, ListHead, ListTail
+from "basics.lambda" import I, K
+
+# Test single element list
+assert: ListHead (ListCons I ListNil) == I
+assert: ListTail (ListCons I ListNil) == ListNil
+
+# Test two element list
+assert: ListHead (ListCons I (ListCons K ListNil)) == I
+assert(50): ListHead (ListTail (ListCons I (ListCons K ListNil))) == K
+assert(50): ListTail (ListTail (ListCons I (ListCons K ListNil))) == ListNil

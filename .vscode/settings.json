@@ -6,5 +6,6 @@
       "matchCommandLine": true
     },
     "timeout": true
-  }
+  },
+  "saveAndRun": {"commands": [{"cmd": " exp/run"}]}
 }

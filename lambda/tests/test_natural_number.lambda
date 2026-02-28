@@ -1,0 +1,49 @@
+# Test script for natural_number.lambda
+from "natural_number.lambda" import NatAdd, NatMultiple, NatPredecessor, NatIsZero
+from "natural_number.lambda" import Nat0, Nat1, Nat2, Nat3, Nat4, Nat5, Nat6, Nat7, Nat8, Nat9
+from "boolean.lambda" import True, False
+
+# Test predefined numbers
+assert: Nat0 == \s.\z.z
+assert: Nat1 == \s.\z.s z
+assert: Nat2 == \s.\z.s (s z)
+
+# Test NatAdd
+assert: NatAdd Nat0 Nat0 == Nat0
+assert: NatAdd Nat1 Nat0 == Nat1
+assert: NatAdd Nat0 Nat1 == Nat1
+assert: NatAdd Nat1 Nat1 == Nat2
+assert: NatAdd Nat1 Nat2 == Nat3
+assert: NatAdd Nat2 Nat2 == Nat4
+assert: NatAdd Nat2 Nat3 == Nat5
+
+# Test NatMultiple
+assert: NatMultiple Nat0 Nat5 == Nat0
+assert: NatMultiple Nat5 Nat0 == Nat0
+assert: NatMultiple Nat1 Nat5 == Nat5
+assert: NatMultiple Nat5 Nat1 == Nat5
+assert: NatMultiple Nat2 Nat2 == Nat4
+assert: NatMultiple Nat2 Nat3 == Nat6
+assert: NatMultiple Nat3 Nat2 == Nat6
+
+# Test NatPredecessor
+assert(100): NatPredecessor Nat1 == Nat0
+assert(100): NatPredecessor Nat2 == Nat1
+assert(100): NatPredecessor Nat3 == Nat2
+assert(100): NatPredecessor Nat4 == Nat3
+assert(100): NatPredecessor Nat5 == Nat4
+
+# Test NatIsZero
+assert: NatIsZero Nat0 == True
+assert: NatIsZero Nat1 == False
+assert: NatIsZero Nat2 == False
+assert: NatIsZero Nat5 == False
+
+# Test constructed numbers (Nat3-Nat9)
+assert: Nat3 == NatAdd Nat2 Nat1
+assert: Nat4 == NatAdd Nat2 Nat2
+assert: Nat5 == NatAdd Nat2 Nat3
+assert: Nat6 == NatAdd Nat2 Nat4
+assert: Nat7 == NatAdd Nat1 Nat6
+assert: Nat8 == NatAdd Nat1 Nat7
+assert: Nat9 == NatAdd Nat1 Nat8

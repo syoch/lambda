@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use lambda::parser::parse;
+use lambda::script::run_script;
 use lambda::search_combination::{search_combination, SearchOptions};
+use std::path::PathBuf;
 
 /// Lambda Calculus CLI - ラムダ計算の簡約化と組み合わせ探索ツール
 #[derive(Parser)]
@@ -49,6 +51,20 @@ enum Commands {
         /// プログレスバーを表示しない
         #[arg(short = 'q', long)]
         quiet: bool,
+
+        /// 詳細ログを表示
+        #[arg(short, long)]
+        verbose: bool,
+    },
+    /// .lambdaスクリプトファイルを実行
+    Run {
+        /// 実行する.lambdaファイルのパス
+        #[arg(value_name = "FILE")]
+        file: PathBuf,
+
+        /// 最大簡約ステップ数
+        #[arg(short, long, default_value = "1000")]
+        max_steps: usize,
 
         /// 詳細ログを表示
         #[arg(short, long)]
@@ -138,6 +154,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("========================================");
                 }
             }
+        }
+        Commands::Run {
+            file,
+            max_steps,
+            verbose,
+        } => {
+            run_script(&file, max_steps, verbose)?;
         }
     }
 
