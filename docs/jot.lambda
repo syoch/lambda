@@ -1,0 +1,24 @@
+S = \x. \y. \z. (x z) (y z)
+K = \x. \y. x
+I = \x. x
+
+A0 = \E. E S K
+A1 = \E. S (K E)
+
+reduce K S
+
+reduce A0 A0 A0 A0
+reduce A0 A0 A0 A1
+reduce A0 A0 A1 A0
+reduce A0 A0 A1 A1
+reduce A0 A1 A0 A0
+reduce A0 A1 A0 A1
+reduce A0 A1 A1 A0
+reduce A0 A1 A1 A1
+reduce A1 A0 A0 A0
+reduce A1 A0 A0 A1
+reduce A1 A0 A1 A0
+reduce A1 A0 A1 A1
+reduce A1 A1 A0 A1
+reduce A1 A1 A1 A0
+reduce A1 A1 A1 A1

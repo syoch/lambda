@@ -3,7 +3,7 @@ use crate::parser::parse_with_env;
 use crate::search_combination::{search_combination, SearchOptions};
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_till, take_until, take_while1},
+    bytes::complete::{tag, take_till, take_while1},
     character::complete::{char, digit1, line_ending, multispace0, not_line_ending, space0},
     combinator::opt,
     multi::many0,
@@ -64,7 +64,11 @@ pub enum Statement {
     /// 空行
     Empty,
     /// 変数定義: name = expr
-    Definition { name: String, expr: String },
+    Definition {
+        name: String,
+        expr: String,
+        reduce: bool,
+    },
     /// アサーション: assert[(steps)]: left == right
     Assertion {
         steps: Option<usize>,
@@ -73,6 +77,8 @@ pub enum Statement {
     },
     /// 簡約ステップ表示: reduce_steps expr
     ReduceSteps { expr: String, steps: Option<usize> },
+    /// 簡約実行: reduce expr (標準形とステップ数を表示)
+    Reduce { expr: String },
     /// 組み合わせ探索: search(n, steps) base_expr -> target_expr
     Search {
         base_expr: String,
@@ -233,14 +239,27 @@ fn process_file(
                     }
                 }
             }
-            Statement::Definition { name, expr } => {
+            Statement::Definition { name, expr, reduce } => {
                 let parsed_expr = parse_with_env(&expr, &env)?;
 
                 if verbose {
                     println!("Define: {} = {}", name, parsed_expr);
                 }
 
-                env.insert(name, parsed_expr);
+                let normalized_expr = if reduce {
+                    if verbose {
+                        println!("  Normalizing");
+                    }
+                    let expr = parsed_expr.normalize(max_steps);
+                    if verbose {
+                        println!("  Normalized: {}", expr);
+                    }
+                    expr
+                } else {
+                    parsed_expr
+                };
+
+                env.insert(name, normalized_expr);
             }
             Statement::Assertion { steps, left, right } => {
                 *test_count += 1;
@@ -277,6 +296,24 @@ fn process_file(
                     println!();
                 }
             }
+            Statement::Reduce { expr } => {
+                let parsed_expr = parse_with_env(&expr, &env)?;
+
+                let mut current = parsed_expr;
+                let mut step_count = 0;
+
+                for step in 0..=max_steps {
+                    if let Some(next) = current.normalize_step() {
+                        current = next;
+                        step_count = step + 1;
+                    } else {
+                        step_count = step;
+                        break;
+                    }
+                }
+
+                println!("Step {}: {}", step_count, current);
+            }
             Statement::ReduceSteps { expr, steps } => {
                 let parsed_expr = parse_with_env(&expr, &env)?;
                 let max = steps.unwrap_or(max_steps);
@@ -286,20 +323,20 @@ fn process_file(
                 // println!();
 
                 let mut current = parsed_expr;
-
-                if max == 0 {
-                    let normalized = current.normalize(max_steps);
-                    println!("Normalized: {}", normalized);
-                } else {
+                if steps.is_some() {
                     println!("Step 0: {}", current);
-                    for step in 1..=max {
-                        if let Some(next) = current.beta_reduce_step() {
-                            println!("Step {}: {}", step, next);
-                            current = next;
-                        } else {
-                            println!("\nReached normal form at step {}.", step - 1);
-                            break;
+                }
+
+                for step in 1..=max {
+                    if let Some(next) = current.normalize_step() {
+                        current = next;
+                        if steps.is_some() {
+                            println!("Step {}: {}", step, current);
                         }
+                    } else {
+                        println!("Step {}: {}", step, current);
+                        println!("\nReached normal form at step {}.", step - 1);
+                        break;
                     }
                 }
 
@@ -359,6 +396,7 @@ fn statement_parser(input: &str) -> IResult<&str, Statement> {
         from_import_parser,
         include_parser,
         reduce_steps_parser,
+        reduce_parser,
         search_parser,
         assertion_parser,
         definition_parser_combinator,
@@ -488,22 +526,40 @@ fn search_parser(input: &str) -> IResult<&str, Statement> {
 
     let (input, _) = multispace0(input)?;
 
-    // base_expr ("->" まで)
-    let (input, base_expr) = take_until("->")(input)?;
-    let (input, _) = tag("->")(input)?;
-    let (input, _) = multispace0(input)?;
+    // base_expr ("->" まで、括弧バランス考慮)
+    let (remaining, base_expr) = read_until_balanced(input, "->");
+    let (remaining, _) = tag("->")(remaining)?;
+    let (remaining, _) = multispace0(remaining)?;
 
-    // target_expr (行末まで)
-    let (input, target_expr) = not_line_ending(input)?;
-    let (input, _) = line_ending(input)?;
+    // target_expr (行末まで、括弧バランス考慮)
+    let (remaining, target_expr) = read_balanced_expr(remaining);
+    let (remaining, _) = alt((line_ending, tag("")))(remaining)?;
 
     Ok((
-        input,
+        remaining,
         Statement::Search {
             base_expr: base_expr.trim().to_string(),
             target_expr: target_expr.trim().to_string(),
             max_n,
             max_steps,
+        },
+    ))
+}
+
+/// 簡約実行パーサー: reduce <expr>
+fn reduce_parser(input: &str) -> IResult<&str, Statement> {
+    let (input, _) = multispace0(input)?;
+    let (input, _) = tag("reduce")(input)?;
+    let (input, _) = multispace0(input)?;
+
+    // 式（行末まで、括弧バランス考慮）
+    let (input, expr) = read_balanced_expr(input);
+    let (input, _) = alt((line_ending, tag("")))(input)?;
+
+    Ok((
+        input,
+        Statement::Reduce {
+            expr: expr.trim().to_string(),
         },
     ))
 }
@@ -522,9 +578,9 @@ fn reduce_steps_parser(input: &str) -> IResult<&str, Statement> {
 
     let (input, _) = multispace0(input)?;
 
-    // 式（行末まで）
-    let (input, expr) = not_line_ending(input)?;
-    let (input, _) = line_ending(input)?;
+    // 式（行末まで、括弧バランス考慮）
+    let (input, expr) = read_balanced_expr(input);
+    let (input, _) = alt((line_ending, tag("")))(input)?;
 
     Ok((
         input,
@@ -551,14 +607,14 @@ fn assertion_parser(input: &str) -> IResult<&str, Statement> {
     let (input, _) = opt(tuple((multispace0, char(':'), multispace0)))(input)?;
     let (input, _) = multispace0(input)?;
 
-    // 左辺（"=="まで）
-    let (input, left) = take_until("==")(input)?;
+    // 左辺（"=="まで、括弧バランス考慮）
+    let (input, left) = read_until_balanced(input, "==");
     let (input, _) = tag("==")(input)?;
     let (input, _) = multispace0(input)?;
 
-    // 右辺（行末まで）
-    let (input, right) = not_line_ending(input)?;
-    let (input, _) = line_ending(input)?;
+    // 右辺（行末まで、括弧バランス考慮）
+    let (input, right) = read_balanced_expr(input);
+    let (input, _) = alt((line_ending, tag("")))(input)?;
 
     Ok((
         input,
@@ -570,25 +626,79 @@ fn assertion_parser(input: &str) -> IResult<&str, Statement> {
     ))
 }
 
-/// 変数定義パーサー
+/// 括弧のバランスを保ちながら式を読む
+fn read_balanced_expr(input: &str) -> (&str, &str) {
+    let mut paren_count = 0;
+    let mut chars = input.char_indices().peekable();
+
+    while let Some((idx, ch)) = chars.next() {
+        match ch {
+            '(' => paren_count += 1,
+            ')' => paren_count -= 1,
+            '\n' => {
+                // 括弧が閉じられていれば、改行で終わる
+                if paren_count == 0 && chars.peek().is_some() {
+                    return (&input[idx..], &input[..idx]);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // ファイル終末に達した場合
+    (&input[input.len()..], input)
+}
+
+/// 括弧バランスを考慮して区切り文字を探す
+fn find_balanced_separator(input: &str, separator: &str) -> Option<usize> {
+    let mut paren_count = 0;
+
+    for i in 0..input.len() {
+        match input[i..].chars().next() {
+            Some('(') => paren_count += 1,
+            Some(')') => paren_count -= 1,
+            _ => {}
+        }
+
+        if paren_count == 0 && input[i..].starts_with(separator) {
+            return Some(i);
+        }
+    }
+
+    None
+}
+
+/// 括弧バランスを保ちながら区切り文字まで読む
+fn read_until_balanced<'a>(input: &'a str, separator: &str) -> (&'a str, &'a str) {
+    if let Some(pos) = find_balanced_separator(input, separator) {
+        (&input[pos..], &input[..pos])
+    } else {
+        // 分離子が見つからない場合は、全入力を返す
+        ("", input)
+    }
+}
+
+/// 変数定義パーサー（複数行括弧対応）
 fn definition_parser_combinator(input: &str) -> IResult<&str, Statement> {
     let (input, _) = multispace0(input)?;
 
     // 識別子
     let (input, name) = take_while1(|c: char| c.is_alphanumeric() || c == '_')(input)?;
     let (input, _) = multispace0(input)?;
+    let (input, non_reduce) = opt(tag(":"))(input)?;
     let (input, _) = char('=')(input)?;
     let (input, _) = multispace0(input)?;
 
-    // 式（行末まで）
-    let (input, expr) = not_line_ending(input)?;
-    let (input, _) = line_ending(input)?;
+    // 式（括弧のバランスを考慮）
+    let (remaining, expr) = read_balanced_expr(input);
+    let (remaining, _) = alt((line_ending, tag("")))(remaining)?;
 
     Ok((
-        input,
+        remaining,
         Statement::Definition {
             name: name.to_string(),
             expr: expr.trim().to_string(),
+            reduce: non_reduce.is_none(),
         },
     ))
 }

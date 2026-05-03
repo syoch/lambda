@@ -12,62 +12,56 @@ pub enum DeBruijn {
     Abs(Box<DeBruijn>),
     /// 関数適用: App(function, argument)
     App(Box<DeBruijn>, Box<DeBruijn>),
+    /// 正規形メモ: Memo(expr)
+    /// [expr] で表現される。β簡約の引数にはなれない
+    Memo(Box<DeBruijn>),
 }
 
 impl DeBruijn {
-    /// β簡約（1ステップ）
-    pub fn beta_reduce_step(&self) -> Option<Self> {
-        match self {
-            DeBruijn::App(m, n) => {
-                if let DeBruijn::Abs(body) = m.as_ref() {
-                    // β簡約を実行: (λ.M) N → M[0 := N]
-                    Some(body.substitute(0, n))
-                } else {
-                    // 左辺を簡約
-                    if let Some(m_reduced) = m.beta_reduce_step() {
-                        Some(DeBruijn::App(Box::new(m_reduced), n.clone()))
-                    } else {
-                        // 右辺を簡約
-                        n.beta_reduce_step()
-                            .map(|n_reduced| DeBruijn::App(m.clone(), Box::new(n_reduced)))
-                    }
-                }
-            }
-            DeBruijn::Abs(body) => {
-                // 本体を簡約
-                body.beta_reduce_step()
-                    .map(|body_reduced| DeBruijn::Abs(Box::new(body_reduced)))
-            }
-            DeBruijn::Var(_) => None,
+    /// インデックスnから変数名を生成 (1文字の場合: a-z, A-Z)
+    fn var_name_single(n: usize) -> Option<String> {
+        if n < 26 {
+            Some((b'a' + n as u8) as char).map(|c| c.to_string())
+        } else if n < 52 {
+            Some((b'A' + (n - 26) as u8) as char).map(|c| c.to_string())
+        } else {
+            None
         }
     }
 
-    /// η簡約（1ステップ）
-    /// λ.M 0 → M （ただし、Mに0が自由に現れていない場合）
-    pub fn eta_reduce_step(&self) -> Option<Self> {
+    /// De Bruijnインデックスをスコープ内の変数名に変換
+    /// depth: 現在のAbs深度, var_idx: De Bruijnインデックス
+    fn debruijn_to_var_name(depth: usize, var_idx: usize) -> String {
+        let scope_var = depth.saturating_sub(1 + var_idx);
+        Self::var_name_single(scope_var).unwrap_or_else(|| format!("x{}", scope_var))
+    }
+
+    /// Pretty print implementation
+    pub fn pretty_print(&self, depth: usize) -> String {
         match self {
+            DeBruijn::Var(n) => Self::debruijn_to_var_name(depth, *n),
             DeBruijn::Abs(body) => {
-                if let DeBruijn::App(m, n) = body.as_ref() {
-                    if let DeBruijn::Var(0) = n.as_ref() {
-                        // λ.(M 0) の形式
-                        // Mに0が自由に現れていないか確認
-                        if !m.has_free_var(0) {
-                            // η簡約を実行: λ.(M 0) → M
-                            // ただしMをシフトダウン
-                            Some(m.shift(-1, 0))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                } else {
-                    // Abs内でη簡約が適用できるか試す
-                    body.eta_reduce_step()
-                        .map(|body_reduced| DeBruijn::Abs(Box::new(body_reduced)))
-                }
+                let var_name = Self::debruijn_to_var_name(depth + 1, 0);
+                format!("\\{}. {}", var_name, body.pretty_print(depth + 1))
             }
-            _ => None,
+            DeBruijn::App(m, n) => {
+                let m_str = match m.as_ref() {
+                    DeBruijn::Abs(_) => {
+                        format!("({})", m.pretty_print(depth))
+                    }
+                    _ => m.pretty_print(depth),
+                };
+                let n_str = match n.as_ref() {
+                    DeBruijn::Var(_) => n.pretty_print(depth),
+                    DeBruijn::Abs(_) => format!("({})", n.pretty_print(depth)),
+                    DeBruijn::Memo(_) => n.pretty_print(depth),
+                    _ => format!("({})", n.pretty_print(depth)),
+                };
+                format!("{} {}", m_str, n_str)
+            }
+            DeBruijn::Memo(expr) => {
+                format!("[{}]", expr.pretty_print(depth))
+            }
         }
     }
 
@@ -80,9 +74,9 @@ impl DeBruijn {
     fn has_free_var_helper(&self, var: usize, depth: usize) -> bool {
         match self {
             DeBruijn::Var(n) => {
-                // 変数 n が var に一致し、且つ n >= depth なら自由変数
-                // depth は現在のλの深さなので、depth以上の変数は外側の変数（自由変数）
-                *n == var && *n >= depth
+                // 変数 n が var に一致するか
+                // depthぶん潜っているため、探している変数のインデックスは var + depth になる
+                *n == var + depth
             }
             DeBruijn::Abs(body) => {
                 // λの下では深さを1増やす
@@ -91,6 +85,7 @@ impl DeBruijn {
             DeBruijn::App(m, n) => {
                 m.has_free_var_helper(var, depth) || n.has_free_var_helper(var, depth)
             }
+            DeBruijn::Memo(expr) => expr.has_free_var_helper(var, depth),
         }
     }
 
@@ -128,6 +123,10 @@ impl DeBruijn {
                 let new_n = n.substitute_helper(idx, replacement, depth);
                 DeBruijn::App(Box::new(new_m), Box::new(new_n))
             }
+            DeBruijn::Memo(expr) => {
+                let new_expr = expr.substitute_helper(idx, replacement, depth);
+                DeBruijn::Memo(Box::new(new_expr))
+            }
         }
     }
 
@@ -160,55 +159,64 @@ impl DeBruijn {
                 Box::new(m.shift_impl(shift, cutoff)),
                 Box::new(n.shift_impl(shift, cutoff)),
             ),
+            DeBruijn::Memo(expr) => DeBruijn::Memo(Box::new(expr.shift_impl(shift, cutoff))),
         }
+    }
+
+    pub fn normalize_step(&self) -> Option<Self> {
+        match self {
+            DeBruijn::App(m, n) => {
+                if let DeBruijn::Abs(body) = m.as_ref() {
+                    if let DeBruijn::Memo(_) = n.as_ref() {
+                    } else {
+                        return Some(body.substitute(0, n));
+                    }
+                }
+
+                if let Some(m_reduced) = m.normalize_step() {
+                    return Some(DeBruijn::App(Box::new(m_reduced), n.clone()));
+                }
+
+                if let Some(n_reduced) = n.normalize_step() {
+                    return Some(DeBruijn::App(m.clone(), Box::new(n_reduced)));
+                }
+            }
+            DeBruijn::Memo(expr) => {
+                if let Some(next) = expr.normalize_step() {
+                    return Some(DeBruijn::Memo(Box::new(next)));
+                }
+            }
+            DeBruijn::Abs(body) => {
+                if let DeBruijn::App(m, n) = body.as_ref() {
+                    if let DeBruijn::Var(0) = n.as_ref() {
+                        // λ.(M 0) の形式
+                        // Mに0が自由に現れていないか確認
+                        if !m.has_free_var(0) {
+                            return Some(m.shift(-1, 0));
+                        }
+                    }
+                }
+                if let Some(next) = body.normalize_step() {
+                    return Some(DeBruijn::Abs(Box::new(next)));
+                }
+            }
+            _ => {}
+        }
+
+        None
     }
 
     /// 正規形まで簡約（所有権を消費）
-    /// max_node_count を超えた場合、早期終了する
     pub fn normalize(mut self, max_steps: usize) -> Self {
-        let max_node_count = 100000; // ノード数の上限
-
-        for step in 0..max_steps {
-            // ノード数チェック（10ステップごと）
-            if step % 10 == 0 && step > 0 {
-                let node_count = self.node_count();
-                if node_count > max_node_count {
-                    eprintln!(
-                        "    [normalize] step {}: node_count={} exceeded limit, early exit",
-                        step, node_count
-                    );
-                    break;
-                }
-            }
-
-            // β簡約を優先、次にη簡約を試す
-            if let Some(next) = self.beta_reduce_step() {
-                self = next;
-            } else if let Some(next) = self.eta_reduce_step() {
+        for _ in 0..max_steps {
+            if let Some(next) = self.normalize_step() {
                 self = next;
             } else {
-                // これ以上トップレベルでの簡約ができない場合
-                // Abs内部を再帰的に正規化
-                if let DeBruijn::Abs(body) = self {
-                    let normalized_body = body.as_ref().clone().normalize(max_steps - step);
-                    self = DeBruijn::Abs(Box::new(normalized_body));
-                    // 正規化後、もう一度チェック
-                    if let Some(next) = self.eta_reduce_step() {
-                        self = next;
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
+                break;
             }
         }
-        self
-    }
 
-    /// 正規形まで簡約（参照版・互換性のため）
-    pub fn normalize_ref(&self, max_steps: usize) -> Self {
-        self.clone().normalize(max_steps)
+        self
     }
 
     /// ノード数を計算
@@ -217,34 +225,14 @@ impl DeBruijn {
             DeBruijn::Var(_) => 1,
             DeBruijn::Abs(body) => 1 + body.node_count(),
             DeBruijn::App(m, n) => 1 + m.node_count() + n.node_count(),
+            DeBruijn::Memo(expr) => 1 + expr.node_count(),
         }
     }
 }
 
 impl fmt::Display for DeBruijn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DeBruijn::Var(n) => write!(f, "{}", n),
-            DeBruijn::Abs(body) => {
-                // 連続したλを見やすくする
-                if let DeBruijn::Abs(_) = body.as_ref() {
-                    write!(f, "λ.{}", body)
-                } else {
-                    write!(f, "λ.{}", body)
-                }
-            }
-            DeBruijn::App(m, n) => {
-                let m_str = match m.as_ref() {
-                    DeBruijn::Abs(_) => format!("({})", m),
-                    _ => format!("{}", m),
-                };
-                let n_str = match n.as_ref() {
-                    DeBruijn::Var(_) => format!("{}", n),
-                    _ => format!("({})", n),
-                };
-                write!(f, "{} {}", m_str, n_str)
-            }
-        }
+        write!(f, "{}", self.pretty_print(0))
     }
 }
 
@@ -258,7 +246,7 @@ mod tests {
     fn test_debruijn_identity() {
         // λ.0 (identity function)
         let id = DeBruijn::Abs(Box::new(DeBruijn::Var(0)));
-        assert_eq!(format!("{}", id), "λ.0");
+        assert_eq!(format!("{}", id), "\\a. a");
     }
 
     #[test]
@@ -266,14 +254,14 @@ mod tests {
         // (λ.0) 0 - identity applied to a free variable
         let id = DeBruijn::Abs(Box::new(DeBruijn::Var(0)));
         let app = DeBruijn::App(Box::new(id), Box::new(DeBruijn::Var(0)));
-        assert_eq!(format!("{}", app), "(λ.0) 0");
+        assert_eq!(format!("{}", app), "(\\a. a) a");
     }
 
     #[test]
     fn test_debruijn_const() {
         // λ.λ.1 (K combinator)
         let k = DeBruijn::Abs(Box::new(DeBruijn::Abs(Box::new(DeBruijn::Var(1)))));
-        assert_eq!(format!("{}", k), "λ.λ.1");
+        assert_eq!(format!("{}", k), "\\a. \\b. a");
     }
 
     #[test]
@@ -334,7 +322,7 @@ mod tests {
         ))))));
 
         // Displayの実装は括弧を最小限にする
-        assert_eq!(format!("{}", s), "λ.λ.λ.2 0 (1 0)");
+        assert_eq!(format!("{}", s), "\\a. \\b. \\c. a c (b c)");
     }
 
     #[test]
@@ -445,31 +433,29 @@ mod tests {
     #[test]
     fn test_debruijn_k_combinator_direct() {
         // Direct test: K = λ.λ.1 (which is \x.\y.x in normal form)
-        let k = DeBruijn::Abs(Box::new(
-            DeBruijn::Abs(Box::new(DeBruijn::Var(1)))
-        ));
-        
+        let k = DeBruijn::Abs(Box::new(DeBruijn::Abs(Box::new(DeBruijn::Var(1)))));
+
         // I = λ.0 (which is \x.x)
         let i = DeBruijn::Abs(Box::new(DeBruijn::Var(0)));
-        
+
         // K I = (λ.λ.1) (λ.0)
         let app = DeBruijn::App(Box::new(k.clone()), Box::new(i.clone()));
-        
+
         // After beta reduction: substitute 0 with I in (λ.1)
         // Body is λ.1, replace 0 with I
         // Result should be λ.I (with I shifted up by 1)
         // I = λ.0, shifted up by 1 = λ.1
         // So result is λ.λ.1 which is K itself
-        
+
         let reduced = app.beta_reduce_step();
         println!("K I reduced once: {:?}", reduced);
-        
+
         if let Some(once_reduced) = reduced {
             // After one step, we should have λ.λ.1 (K itself)
             // Let's verify by normalizing further
             let normalized = once_reduced.clone().normalize(10);
             println!("K I normalized: {:?}", normalized);
-            
+
             // The result should equal K because:
             // After beta: λ.I = λ.(λ.0) which needs to be eta-reduced
             // But λ.(λ.0) applied to something becomes (λ.0) which is I

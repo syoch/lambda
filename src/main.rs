@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  Step 0: {}", current);
 
                 for step in 1..=max_steps {
-                    if let Some(next) = current.beta_reduce_step() {
+                    if let Some(next) = current.normalize_step() {
                         println!("  Step {}: {}", step, next);
                         current = next;
                     } else {
@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
 
-                if current.beta_reduce_step().is_some() {
+                if current.normalize_step().is_some() {
                     println!("\n最大ステップ数 {} に到達しました。", max_steps);
                 }
             } else {

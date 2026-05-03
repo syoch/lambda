@@ -43,6 +43,7 @@
             perf
             clang-tools
             clang
+            nodejs
           ];
 
           shellHook = ''

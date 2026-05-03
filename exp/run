@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 
-cd `dirname $0`
-lambda run a.lambda
+set -euo pipefail
+cd `dirname $0`/..
+
+build
+time lambda run --max-steps=20000000 $1

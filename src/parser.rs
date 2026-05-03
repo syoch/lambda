@@ -9,17 +9,28 @@ use std::collections::HashMap;
 
 /// 文字列からラムダ式をパースする公開関数
 pub fn parse(input: &str) -> Result<DeBruijn, String> {
-    fn parse_impl<'a>(env: &Vec<&'a str>, input: &'a str) -> IResult<&'a str, DeBruijn> {
-        application_impl(env, input)
+    use std::cell::RefCell;
+    let errors = RefCell::new(Vec::new());
+
+    fn parse_impl<'a>(
+        env: &Vec<&'a str>,
+        input: &'a str,
+        errors: &RefCell<Vec<String>>,
+    ) -> IResult<&'a str, DeBruijn> {
+        application_impl(env, input, errors)
     }
 
-    fn application_impl<'a>(env: &Vec<&'a str>, input: &'a str) -> IResult<&'a str, DeBruijn> {
-        let (input, first) = term_impl(env, input)?;
+    fn application_impl<'a>(
+        env: &Vec<&'a str>,
+        input: &'a str,
+        errors: &RefCell<Vec<String>>,
+    ) -> IResult<&'a str, DeBruijn> {
+        let (input, first) = term_impl(env, input, errors)?;
         let (mut input, _) = multispace0(input)?;
 
         let mut result = first;
         loop {
-            match term_impl(env, input) {
+            match term_impl(env, input, errors) {
                 Ok((new_input, term)) => {
                     result = DeBruijn::App(Box::new(result), Box::new(term));
                     let (i, _) = multispace0(new_input)?;
@@ -32,16 +43,25 @@ pub fn parse(input: &str) -> Result<DeBruijn, String> {
         Ok((input, result))
     }
 
-    fn term_impl<'a>(env: &Vec<&'a str>, input: &'a str) -> IResult<&'a str, DeBruijn> {
+    fn term_impl<'a>(
+        env: &Vec<&'a str>,
+        input: &'a str,
+        errors: &RefCell<Vec<String>>,
+    ) -> IResult<&'a str, DeBruijn> {
         let (input, _) = multispace0(input)?;
         alt((
-            |i| abstraction_impl(env, i),
-            |i| parens_impl(env, i),
-            |i| variable_impl(env, i),
+            |i| abstraction_impl(env, i, errors),
+            |i| memo_impl(env, i, errors),
+            |i| parens_impl(env, i, errors),
+            |i| variable_impl(env, i, errors),
         ))(input)
     }
 
-    fn variable_impl<'a>(env: &Vec<&'a str>, input: &'a str) -> IResult<&'a str, DeBruijn> {
+    fn variable_impl<'a>(
+        env: &Vec<&'a str>,
+        input: &'a str,
+        errors: &RefCell<Vec<String>>,
+    ) -> IResult<&'a str, DeBruijn> {
         let (input, var_name) =
             take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '.')(input)?;
         let (input, _) = multispace0(input)?;
@@ -53,21 +73,45 @@ pub fn parse(input: &str) -> Result<DeBruijn, String> {
             }
         }
 
-        // 自由変数の場合
+        // 未定義変数の場合
+        errors.borrow_mut().push(var_name.to_string());
+        // ダミーとして自由変数を返す
         Ok((input, DeBruijn::Var(env.len())))
     }
 
-    fn parens_impl<'a>(env: &Vec<&'a str>, input: &'a str) -> IResult<&'a str, DeBruijn> {
+    fn memo_impl<'a>(
+        env: &Vec<&'a str>,
+        input: &'a str,
+        errors: &RefCell<Vec<String>>,
+    ) -> IResult<&'a str, DeBruijn> {
+        let (input, _) = char('[')(input)?;
+        let (input, _) = multispace0(input)?;
+        let (input, expr) = parse_impl(env, input, errors)?;
+        let (input, _) = multispace0(input)?;
+        let (input, _) = char(']')(input)?;
+        let (input, _) = multispace0(input)?;
+        Ok((input, DeBruijn::Memo(Box::new(expr))))
+    }
+
+    fn parens_impl<'a>(
+        env: &Vec<&'a str>,
+        input: &'a str,
+        errors: &RefCell<Vec<String>>,
+    ) -> IResult<&'a str, DeBruijn> {
         let (input, _) = char('(')(input)?;
         let (input, _) = multispace0(input)?;
-        let (input, expr) = parse_impl(env, input)?;
+        let (input, expr) = parse_impl(env, input, errors)?;
         let (input, _) = multispace0(input)?;
         let (input, _) = char(')')(input)?;
         let (input, _) = multispace0(input)?;
         Ok((input, expr))
     }
 
-    fn abstraction_impl<'a>(env: &Vec<&'a str>, input: &'a str) -> IResult<&'a str, DeBruijn> {
+    fn abstraction_impl<'a>(
+        env: &Vec<&'a str>,
+        input: &'a str,
+        errors: &RefCell<Vec<String>>,
+    ) -> IResult<&'a str, DeBruijn> {
         let (input, _) = alt((char('λ'), char('\\')))(input)?;
         let (input, _) = multispace0(input)?;
 
@@ -97,7 +141,7 @@ pub fn parse(input: &str) -> Result<DeBruijn, String> {
             new_env.push(param);
         }
 
-        let (input, body) = parse_impl(&new_env, input)?;
+        let (input, body) = parse_impl(&new_env, input, errors)?;
 
         // 複数のパラメータがある場合は右から順にネストする
         let result = params
@@ -109,8 +153,13 @@ pub fn parse(input: &str) -> Result<DeBruijn, String> {
     }
 
     let env = Vec::new();
-    match parse_impl(&env, input) {
+    match parse_impl(&env, input, &errors) {
         Ok((remaining, expr)) => {
+            let errors_list = errors.into_inner();
+            if !errors_list.is_empty() {
+                return Err(format!("未定義の変数です: {}", errors_list.join(", ")));
+            }
+
             let remaining = remaining.trim();
             if remaining.is_empty() {
                 Ok(expr)
@@ -131,6 +180,9 @@ pub fn parse_with_env(
     input: &str,
     env_map: &HashMap<String, DeBruijn>,
 ) -> Result<DeBruijn, String> {
+    use std::cell::RefCell;
+    let errors = RefCell::new(Vec::new());
+
     // 環境変数をプレースホルダーとして扱う
     // 各環境変数に対して、自由変数としてインデックスを割り当てる
     // パース後、それらのインデックスを実際の式に置換する
@@ -140,8 +192,9 @@ pub fn parse_with_env(
         env_map: &HashMap<String, DeBruijn>,
         env_order: &Vec<String>,
         input: &'a str,
+        errors: &RefCell<Vec<String>>,
     ) -> IResult<&'a str, DeBruijn> {
-        application_impl_env(bound_vars, env_map, env_order, input)
+        application_impl_env(bound_vars, env_map, env_order, input, errors)
     }
 
     fn application_impl_env<'a>(
@@ -149,13 +202,14 @@ pub fn parse_with_env(
         env_map: &HashMap<String, DeBruijn>,
         env_order: &Vec<String>,
         input: &'a str,
+        errors: &RefCell<Vec<String>>,
     ) -> IResult<&'a str, DeBruijn> {
-        let (input, first) = term_impl_env(bound_vars, env_map, env_order, input)?;
+        let (input, first) = term_impl_env(bound_vars, env_map, env_order, input, errors)?;
         let (mut input, _) = multispace0(input)?;
 
         let mut result = first;
         loop {
-            match term_impl_env(bound_vars, env_map, env_order, input) {
+            match term_impl_env(bound_vars, env_map, env_order, input, errors) {
                 Ok((new_input, term)) => {
                     result = DeBruijn::App(Box::new(result), Box::new(term));
                     let (i, _) = multispace0(new_input)?;
@@ -173,12 +227,14 @@ pub fn parse_with_env(
         env_map: &HashMap<String, DeBruijn>,
         env_order: &Vec<String>,
         input: &'a str,
+        errors: &RefCell<Vec<String>>,
     ) -> IResult<&'a str, DeBruijn> {
         let (input, _) = multispace0(input)?;
         alt((
-            |i| abstraction_impl_env(bound_vars, env_map, env_order, i),
-            |i| parens_impl_env(bound_vars, env_map, env_order, i),
-            |i| variable_impl_env(bound_vars, env_map, env_order, i),
+            |i| abstraction_impl_env(bound_vars, env_map, env_order, i, errors),
+            |i| memo_impl_env(bound_vars, env_map, env_order, i, errors),
+            |i| parens_impl_env(bound_vars, env_map, env_order, i, errors),
+            |i| variable_impl_env(bound_vars, env_map, env_order, i, errors),
         ))(input)
     }
 
@@ -187,6 +243,7 @@ pub fn parse_with_env(
         env_map: &HashMap<String, DeBruijn>,
         env_order: &Vec<String>,
         input: &'a str,
+        errors: &RefCell<Vec<String>>,
     ) -> IResult<&'a str, DeBruijn> {
         let (input, var_name) =
             take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '.')(input)?;
@@ -206,8 +263,26 @@ pub fn parse_with_env(
             return Ok((input, shifted));
         }
 
-        // 自由変数の場合
+        // 未定義変数の場合
+        errors.borrow_mut().push(var_name.to_string());
+        // ダミーとして自由変数を返す
         Ok((input, DeBruijn::Var(bound_vars.len() + env_order.len())))
+    }
+
+    fn memo_impl_env<'a>(
+        bound_vars: &Vec<&'a str>,
+        env_map: &HashMap<String, DeBruijn>,
+        env_order: &Vec<String>,
+        input: &'a str,
+        errors: &RefCell<Vec<String>>,
+    ) -> IResult<&'a str, DeBruijn> {
+        let (input, _) = char('[')(input)?;
+        let (input, _) = multispace0(input)?;
+        let (input, expr) = parse_impl_with_env(bound_vars, env_map, env_order, input, errors)?;
+        let (input, _) = multispace0(input)?;
+        let (input, _) = char(']')(input)?;
+        let (input, _) = multispace0(input)?;
+        Ok((input, DeBruijn::Memo(Box::new(expr))))
     }
 
     fn parens_impl_env<'a>(
@@ -215,10 +290,11 @@ pub fn parse_with_env(
         env_map: &HashMap<String, DeBruijn>,
         env_order: &Vec<String>,
         input: &'a str,
+        errors: &RefCell<Vec<String>>,
     ) -> IResult<&'a str, DeBruijn> {
         let (input, _) = char('(')(input)?;
         let (input, _) = multispace0(input)?;
-        let (input, expr) = parse_impl_with_env(bound_vars, env_map, env_order, input)?;
+        let (input, expr) = parse_impl_with_env(bound_vars, env_map, env_order, input, errors)?;
         let (input, _) = multispace0(input)?;
         let (input, _) = char(')')(input)?;
         let (input, _) = multispace0(input)?;
@@ -230,6 +306,7 @@ pub fn parse_with_env(
         env_map: &HashMap<String, DeBruijn>,
         env_order: &Vec<String>,
         input: &'a str,
+        errors: &RefCell<Vec<String>>,
     ) -> IResult<&'a str, DeBruijn> {
         let (input, _) = alt((char('λ'), char('\\')))(input)?;
         let (input, _) = multispace0(input)?;
@@ -260,7 +337,8 @@ pub fn parse_with_env(
             new_bound_vars.push(param);
         }
 
-        let (input, body) = parse_impl_with_env(&new_bound_vars, env_map, env_order, input)?;
+        let (input, body) =
+            parse_impl_with_env(&new_bound_vars, env_map, env_order, input, errors)?;
 
         // 複数のパラメータがある場合は右から順にネストする
         let result = params
@@ -274,8 +352,17 @@ pub fn parse_with_env(
     let bound_vars = Vec::new();
     let env_order: Vec<String> = env_map.keys().cloned().collect();
 
-    match parse_impl_with_env(&bound_vars, env_map, &env_order, input) {
+    match parse_impl_with_env(&bound_vars, env_map, &env_order, input, &errors) {
         Ok((remaining, expr)) => {
+            let errors_list = errors.into_inner();
+            if !errors_list.is_empty() {
+                // 重複を排除
+                let mut unique_errors: Vec<String> = errors_list.into_iter().collect();
+                unique_errors.sort();
+                unique_errors.dedup();
+                return Err(format!("未定義の変数です: {}", unique_errors.join(", ")));
+            }
+
             let remaining = remaining.trim();
             if remaining.is_empty() {
                 Ok(expr)
@@ -296,9 +383,10 @@ mod tests {
 
     #[test]
     fn test_parse_variable() {
-        // 自由変数 x -> Var(0) (環境が空なので)
-        let result = parse("x").unwrap();
-        assert_eq!(result, DeBruijn::Var(0));
+        // 未定義変数 x はエラーになる
+        let result = parse("x");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "未定義の変数です: x");
     }
 
     #[test]
@@ -307,45 +395,43 @@ mod tests {
         let result = parse("\\x.x").unwrap();
         assert_eq!(result, DeBruijn::Abs(Box::new(DeBruijn::Var(0))));
 
-        // λx.y -> λ.1 (yは自由変数)
-        let result = parse("λx.y").unwrap();
-        assert_eq!(result, DeBruijn::Abs(Box::new(DeBruijn::Var(1))));
+        // λx.y -> yは未定義変数
+        let result = parse("λx.y");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "未定義の変数です: y");
     }
 
     #[test]
     fn test_parse_application() {
-        // x y -> 0 0 (両方自由変数)
-        let result = parse("x y").unwrap();
-        assert_eq!(
-            result,
-            DeBruijn::App(Box::new(DeBruijn::Var(0)), Box::new(DeBruijn::Var(0)))
-        );
+        // x y -> 両方未定義変数
+        let result = parse("x y");
+        assert!(result.is_err());
 
-        // a b c (左結合) -> (0 0) 0
-        let result = parse("a b c").unwrap();
+        // a b c (左結合) -> 未定義変数
+        let result = parse("a b c");
+        assert!(result.is_err());
+
+        // 正しいケース: \x.\y.\z. x y z
+        let result = parse("\\x.\\y.\\z. x y z").unwrap();
         assert_eq!(
             result,
-            DeBruijn::App(
-                Box::new(DeBruijn::App(
-                    Box::new(DeBruijn::Var(0)),
-                    Box::new(DeBruijn::Var(0))
-                )),
-                Box::new(DeBruijn::Var(0))
-            )
+            DeBruijn::Abs(Box::new(DeBruijn::Abs(Box::new(DeBruijn::Abs(Box::new(
+                DeBruijn::App(
+                    Box::new(DeBruijn::App(
+                        Box::new(DeBruijn::Var(2)), // x
+                        Box::new(DeBruijn::Var(1))  // y
+                    )),
+                    Box::new(DeBruijn::Var(0)) // z
+                )
+            ))))))
         );
     }
 
     #[test]
     fn test_parse_complex() {
-        // (λx.x) y -> (λ.0) 0
-        let result = parse("(\\x.x) y").unwrap();
-        assert_eq!(
-            result,
-            DeBruijn::App(
-                Box::new(DeBruijn::Abs(Box::new(DeBruijn::Var(0)))),
-                Box::new(DeBruijn::Var(0))
-            )
-        );
+        // (λx.x) y -> yが未定義変数
+        let result = parse("(\\x.x) y");
+        assert!(result.is_err());
 
         // λx.λy.x (K combinator) -> λ.λ.1
         let result = parse("\\x.\\y.x").unwrap();

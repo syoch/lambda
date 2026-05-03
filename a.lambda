@@ -1,0 +1,40 @@
+from "basics.lambda" import I, K, S
+from "boolean.lambda" import True, False
+from "natural_number.lambda" import Nat0, Nat1, Nat2, Nat3, Nat4, Nat5, Nat6, Nat7, Nat8, Nat9
+from "natural_number.lambda" import NatAdd, NatMul, NatPredecessor, NatIsZero
+from "pair.lambda" import Pair, PairFirst, PairSecond
+
+Nat10 = NatAdd Nat2 Nat8
+Nat48 = NatMul Nat6 Nat8
+Nat16 = NatMul Nat4 Nat4
+Nat24 = NatMul Nat3 Nat8
+Nat42 = NatMul Nat6 Nat7
+Nat27 = NatMul Nat3 Nat9
+Nat30 = NatMul Nat3 Nat10
+Nat31 = NatAdd Nat1 Nat30
+Nat32 = NatAdd Nat1 Nat31
+Nat33 = NatAdd Nat2 Nat31
+Nat62 = NatMul Nat2 Nat31
+Nat63 = NatAdd Nat1 Nat62
+Nat120 = NatMul Nat4 Nat30
+Nat256 = NatMul Nat16 Nat16
+
+F = S (S (S (S K K) (K (S (S (K S) (S (S (K S) (S (S (K S) (K (S (S K K) (K S)))) (S (K K) (S (K (S (S K K))) (S (K K) (S (S K K) (K (K (S K K))))))))) (K (K (S (K S) K))))) (S (K K) (S (S K K) (K K)))))) (K (K (S K K)))) (K (K (S K K)))
+assert F Nat4 == Nat24
+assert F Nat5 == Nat120
+
+F2 = (\n.
+  n
+  (\state.
+    Pair
+    (NatAdd Nat1 (state True))
+    (NatMul (state False) (state True))
+  )
+  (Pair Nat1 Nat1)
+  False
+)
+assert F2 Nat4 == Nat24
+assert F2 Nat5 == Nat120
+
+# NadAdd
+# S (K S) (S (K (S (K S))) (S (K K)))
