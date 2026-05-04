@@ -14,5 +14,7 @@
         "match": ".*/.*\\.run.js"
       }
     ]
-  }
+  },
+  "lambda.lsp.serverPath": "lambda",
+  "lambda.lsp.debug.enable": true,
 }

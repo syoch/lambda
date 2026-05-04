@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use lambda::lsp::run_lsp_server;
 use lambda::parser::parse;
 use lambda::script::run_script;
 use lambda::search_combination::{search_combination, SearchOptions};
@@ -69,6 +70,12 @@ enum Commands {
         /// 詳細ログを表示
         #[arg(short, long)]
         verbose: bool,
+    },
+    /// LSP サーバーを起動（エディタ統合用）
+    Lsp {
+        /// VSCode の LanguageClient が stdio 起動時に付与する互換フラグ
+        #[arg(long)]
+        stdio: bool,
     },
 }
 
@@ -161,6 +168,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             verbose,
         } => {
             run_script(&file, max_steps, verbose)?;
+        }
+        Commands::Lsp { stdio: _ } => {
+            let rt = tokio::runtime::Runtime::new()?;
+            rt.block_on(async {
+                run_lsp_server().await?;
+                Ok::<(), anyhow::Error>(())
+            })?;
         }
     }
 

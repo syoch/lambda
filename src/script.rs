@@ -17,15 +17,24 @@ use std::path::{Path, PathBuf};
 /// 実行ファイルが A/bin/lambda の場合、A/lib/lambda を返す
 fn get_lib_path() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let exe_dir = exe.parent()?;
+    let mut current = exe.parent()?;
 
-    // bin ディレクトリの場合、lib/lambda に変更
-    if exe_dir.file_name()? == "bin" {
-        let base = exe_dir.parent()?;
-        Some(base.join("lib").join("lambda"))
-    } else {
-        None
+    // target/release などから起動される場合もあるので、上位ディレクトリを探索する
+    for _ in 0..6 {
+        let direct = current.join("lib").join("lambda");
+        if direct.exists() {
+            return Some(direct);
+        }
+
+        let nested = current.join("lambda").join("lib").join("lambda");
+        if nested.exists() {
+            return Some(nested);
+        }
+
+        current = current.parent()?;
     }
+
+    None
 }
 
 /// ファイルパスを解決（相対パスまたは標準ライブラリパスから探す）
@@ -146,6 +155,80 @@ pub fn run_script(
     } else {
         Err(format!("{} test(s) failed", test_count - passed_count).into())
     }
+}
+
+/// スクリプト本文から評価環境を構築する
+/// LSP の inlay hints や補完候補の解決で使う
+pub fn build_env_from_content(
+    content: &str,
+    base_path: Option<&Path>,
+    max_steps: usize,
+) -> Result<HashMap<String, DeBruijn>, Box<dyn std::error::Error>> {
+    let statements = parse_script(content)?;
+    let mut env: HashMap<String, DeBruijn> = HashMap::new();
+
+    build_env_from_statements(&statements, base_path, &mut env, max_steps)?;
+
+    Ok(env)
+}
+
+fn build_env_from_statements(
+    statements: &[Statement],
+    base_path: Option<&Path>,
+    env: &mut HashMap<String, DeBruijn>,
+    max_steps: usize,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for statement in statements {
+        match statement {
+            Statement::Comment | Statement::Empty => {}
+            Statement::Include { path, namespace } => {
+                let include_path = resolve_file_path(path, base_path)?;
+                let content = std::fs::read_to_string(&include_path)?;
+                let included = build_env_from_content(&content, include_path.parent(), max_steps)?;
+
+                if let Some(ns) = namespace {
+                    for (name, expr) in included {
+                        env.insert(format!("{}.{}", ns, name), expr);
+                    }
+                } else {
+                    env.extend(included);
+                }
+            }
+            Statement::FromImport { path, names } => {
+                let include_path = resolve_file_path(path, base_path)?;
+                let content = std::fs::read_to_string(&include_path)?;
+                let included = build_env_from_content(&content, include_path.parent(), max_steps)?;
+
+                for name in names {
+                    if let Some(expr) = included.get(name) {
+                        env.insert(name.clone(), expr.clone());
+                    } else {
+                        return Err(format!(
+                            "Name '{}' not found in {}",
+                            name,
+                            include_path.display()
+                        )
+                        .into());
+                    }
+                }
+            }
+            Statement::Definition { name, expr, reduce } => {
+                let parsed_expr = parse_with_env(expr, env)?;
+                let normalized_expr = if *reduce {
+                    parsed_expr.normalize(max_steps)
+                } else {
+                    parsed_expr
+                };
+                env.insert(name.clone(), normalized_expr);
+            }
+            Statement::Assertion { .. }
+            | Statement::ReduceSteps { .. }
+            | Statement::Reduce { .. }
+            | Statement::Search { .. } => {}
+        }
+    }
+
+    Ok(())
 }
 
 /// ファイルを処理する（再帰的に呼ばれる）

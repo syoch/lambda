@@ -7,18 +7,47 @@ A1 = \E. S (K E)
 
 reduce K S
 
-reduce A0 A0 A0 A0
-reduce A0 A0 A0 A1
-reduce A0 A0 A1 A0
-reduce A0 A0 A1 A1
-reduce A0 A1 A0 A0
-reduce A0 A1 A0 A1
-reduce A0 A1 A1 A0
-reduce A0 A1 A1 A1
-reduce A1 A0 A0 A0
-reduce A1 A0 A0 A1
-reduce A1 A0 A1 A0
-reduce A1 A0 A1 A1
-reduce A1 A1 A0 A1
-reduce A1 A1 A1 A0
-reduce A1 A1 A1 A1
+reduce A0 (A1 (A0 (A1 (A0 (A0 (A0 I))))))
+reduce A0 (A0 (A0 (A0 (A1 (A0 (A1 I))))))
+reduce A0 (A0 (A0 (A1 (A0 (A0 (A0 I))))))
+reduce A0 (A0 (A0 (A0 (A0 (A1 (A1 I))))))
+reduce A0 (A0 (A1 (A0 (A0 (A1 (A1 I))))))
+reduce A0 (A0 (A1 (A1 (A1 (A0 (A0 I))))))
+reduce A0 (A1 (A0 (A0 (A0 (A1 (A0 I))))))
+reduce A0 (A0 (A1 (A1 (A0 (A0 (A0 I))))))
+reduce A0 (A0 (A0 (A0 (A0 (A1 (A0 I))))))
+reduce A0 (A1 (A0 (A0 (A0 (A0 (A1 I))))))
+reduce A0 (A0 (A1 (A1 (A1 (A1 (A0 I))))))
+reduce A0 (A1 (A0 (A1 (A1 (A0 (A0 I))))))
+reduce A0 (A1 (A1 (A0 (A0 (A1 (A1 I))))))
+reduce A0 (A1 (A0 (A0 (A0 (A1 (A1 I))))))
+reduce A0 (A1 (A1 (A0 (A0 (A0 (A0 I))))))
+reduce A0 (A1 (A1 (A1 (A0 (A1 (A1 I))))))
+reduce A0 (A1 (A1 (A1 (A0 (A0 (A1 I))))))
+reduce A0 (A1 (A1 (A0 (A0 (A0 (A1 I))))))
+reduce A0 (A1 (A1 (A1 (A1 (A0 (A1 I))))))
+reduce A0 (A1 (A1 (A1 (A1 (A0 (A0 I))))))
+reduce A0 (A1 (A1 (A1 (A0 (A0 (A0 I))))))
+reduce A0 (A1 (A1 (A1 (A1 (A1 (A0 I))))))
+reduce A1 (A1 (A0 (A1 (A0 (A0 (A0 I))))))
+reduce A1 (A0 (A0 (A0 (A1 (A0 (A1 I))))))
+reduce A1 (A0 (A0 (A1 (A0 (A0 (A0 I))))))
+reduce A1 (A0 (A0 (A0 (A0 (A1 (A1 I))))))
+reduce A1 (A0 (A1 (A0 (A0 (A1 (A1 I))))))
+reduce A1 (A0 (A1 (A1 (A1 (A0 (A0 I))))))
+reduce A1 (A1 (A0 (A0 (A0 (A1 (A0 I))))))
+reduce A1 (A0 (A1 (A1 (A0 (A0 (A0 I))))))
+reduce A1 (A0 (A0 (A0 (A0 (A1 (A0 I))))))
+reduce A1 (A1 (A0 (A0 (A0 (A0 (A1 I))))))
+reduce A1 (A0 (A1 (A1 (A1 (A1 (A0 I))))))
+reduce A1 (A1 (A0 (A1 (A1 (A0 (A0 I))))))
+reduce A1 (A1 (A1 (A0 (A0 (A1 (A1 I))))))
+reduce A1 (A1 (A0 (A0 (A0 (A1 (A1 I))))))
+reduce A1 (A1 (A1 (A0 (A0 (A0 (A0 I))))))
+reduce A1 (A1 (A1 (A1 (A0 (A1 (A1 I))))))
+reduce A1 (A1 (A1 (A1 (A0 (A0 (A1 I))))))
+reduce A1 (A1 (A1 (A0 (A0 (A0 (A1 I))))))
+reduce A1 (A1 (A1 (A1 (A1 (A0 (A1 I))))))
+reduce A1 (A1 (A1 (A1 (A1 (A0 (A0 I))))))
+reduce A1 (A1 (A1 (A1 (A0 (A0 (A0 I))))))
+reduce A1 (A1 (A1 (A1 (A1 (A1 (A0 I))))))

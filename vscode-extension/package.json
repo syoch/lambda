@@ -1,0 +1,151 @@
+{
+  "name": "lambda-lang-support",
+  "displayName": "Lambda Language Support",
+  "description": "Language support for Lambda Calculus scripts (.lambda files) with LSP integration",
+  "version": "0.1.0",
+  "publisher": "lambda-dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/example/lambda"
+  },
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "lambda",
+    "calculus",
+    "functional",
+    "lsp"
+  ],
+  "activationEvents": [
+    "onLanguage:lambda"
+  ],
+  "main": "./out/extension.js",
+
+  "contributes": {
+    "languages": [
+      {
+        "id": "lambda",
+        "aliases": [
+          "Lambda",
+          "lambda"
+        ],
+        "extensions": [
+          ".lambda"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lambda",
+        "scopeName": "source.lambda",
+        "path": "./syntaxes/lambda.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "lambda.reduce",
+        "title": "Lambda: Reduce Expression",
+        "description": "Reduce the current expression to normal form"
+      },
+      {
+        "command": "lambda.configureLsp",
+        "title": "Lambda: Configure LSP Server",
+        "description": "Set the path to the lambda CLI executable"
+      },
+      {
+        "command": "lambda.showInlayHints",
+        "title": "Lambda: Toggle Inlay Hints",
+        "description": "Toggle Inlay Hints for reduce/assert commands"
+      }
+    ],
+    "configuration": {
+      "title": "Lambda Language Support",
+      "properties": {
+        "lambda.lsp.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Lambda LSP server for language support"
+        },
+        "lambda.lsp.serverPath": {
+          "type": "string",
+          "default": "lambda",
+          "description": "Path to the lambda CLI executable or command. Can be 'lambda' if in PATH, or a full path like '/usr/local/bin/lambda'",
+          "scope": "window"
+        },
+        "lambda.lsp.serverArgs": {
+          "type": "array",
+          "default": [
+            "lsp"
+          ],
+          "description": "Additional arguments to pass to the Lambda LSP server",
+          "scope": "window"
+        },
+        "lambda.lsp.debug.enable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable verbose LSP protocol debugging logs from both client and server",
+          "scope": "window"
+        },
+        "lambda.lsp.debug.trace": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace level for Language Client protocol logs",
+          "scope": "window"
+        },
+        "lambda.inlayHints.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Inlay Hints for reduce/assert commands to display reduced forms"
+        },
+        "lambda.completion.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable code completion for Lambda keywords and commands"
+        },
+        "lambda.hover.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable hover information for Lambda commands"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile && npm run bundle-deps",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "bundle-deps": "mkdir -p out/vendor && cp -R node_modules/vscode-languageclient out/vendor/ && cp -R node_modules/vscode-jsonrpc out/vendor/ && cp -R node_modules/vscode-languageserver-protocol out/vendor/ && cp -R node_modules/vscode-languageserver-types out/vendor/ && cp -R node_modules/semver out/vendor/ || true",
+    "package": "npx @vscode/vsce package --out lambda-lang-support.vsix",
+    "publish": "npx @vscode/vsce publish"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver-protocol": "^3.17.5",
+    "vscode-languageserver-types": "^3.17.5",
+    "semver": "^7.7.4"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/vscode": "^1.70.0",
+    "@typescript-eslint/eslint-plugin": "^5.31.0",
+    "@typescript-eslint/parser": "^5.31.0",
+    "balanced-match": "^4.0.4",
+    "eslint": "^8.20.0",
+    "typescript": "^5.0.0",
+    "vscode": "^1.1.36"
+  }
+}

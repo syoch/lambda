@@ -33,6 +33,51 @@
         };
       in
       {
+        packages = {
+          vsix = pkgs.stdenv.mkDerivation {
+            name = "lambda-lang-support.vsix";
+            src = ./vscode-extension;
+
+            nativeBuildInputs = with pkgs; [
+              nodejs_25
+            ];
+
+            buildPhase = ''
+              npm install
+              npm run compile
+            '';
+
+            installPhase = ''
+              mkdir -p $out
+              npx @vscode/vsce package --out $out/lambda-lang-support.vsix
+            '';
+
+            phases = [
+              "unpackPhase"
+              "buildPhase"
+              "installPhase"
+            ];
+          };
+
+          default = self.packages.${system}.vsix;
+        };
+
+        apps.build-vsix = {
+          type = "app";
+          program = toString (
+            pkgs.writeShellScript "build-vsix" ''
+              set -e
+              cd vscode-extension
+              npm install
+              npm run compile
+              npx @vscode/vsce package --out ./lambda-lang-support.vsix
+              echo "✓ VSIX created: ./lambda-lang-support.vsix"
+            ''
+          );
+        };
+
+        apps.default = self.apps.${system}.build-vsix;
+
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
             rustToolchain
@@ -43,7 +88,9 @@
             perf
             clang-tools
             clang
-            nodejs
+
+            nodejs_25
+            esbuild
           ];
 
           shellHook = ''
